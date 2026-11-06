@@ -1,0 +1,26 @@
+---
+title: "Signal to Noise"
+author: "Anna Redhuis, Ritika Tappeta"
+format: html
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+## Overview
+
+## Overlaid trajectories
+
+![Mean expression trajectory of each gene (replicates averaged per
+timepoint). Expression is log2(counts + 1), z-scored within each gene so
+that genes with very different expression levels can share one axis.
+Each line is one gene.](snr_trajectories_overlay.png){#fig-overlay}
+
+## Individual genes
+
+![Each panel is one gene. Points are individual replicates (raw read
+counts); the line is the polynomial fit of expression on time-point, the
+model from which SNR is calculated. The y-axis is set separately for
+each gene.](snr_trajectories_per_gene.png){#fig-genes}
+
+## 
