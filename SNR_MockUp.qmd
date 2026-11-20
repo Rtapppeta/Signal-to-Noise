@@ -1,6 +1,7 @@
 ---
 title: "Signal to Noise"
 author: "Anna Redhuis, Ritika Tappeta"
+bibliography: references.bib
 format: html
 editor: 
   markdown: 
