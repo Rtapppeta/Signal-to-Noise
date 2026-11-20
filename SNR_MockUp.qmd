@@ -7,20 +7,137 @@ editor:
     wrap: 72
 ---
 
-## Overview
+# Background
 
-## Overlaid trajectories
+Measuring gene expression as a time series after a change in
+environmental conditions is an increasingly popular way to obtain
+precise and cost-effective information about how organisms respond. A
+single experiment can follow every gene in the genome across many time
+points, as in the dense time course of the *Drosophila melanogaster*
+innate immune response, which sampled 21 time points after immune
+challenge [@schlamp2021]. Time-series RNA-seq is now used across very
+different systems, from immune challenge in flies to embryonic
+development in pigs and placental development in mice [@nascimento2017;
+@vu2022].
 
-![Mean expression trajectory of each gene (replicates averaged per
-timepoint). Expression is log2(counts + 1), z-scored within each gene so
-that genes with very different expression levels can share one axis.
-Each line is one gene.](snr_trajectories_overlay.png){#fig-overlay}
+A major challenge in analyzing time-series RNA-seq is determining which
+genes are actually responding over time. Variance, measured as deviation
+from a gene's mean, does not capture a time-dependent response, in which
+each time point is correlated with its neighboring time points: a gene
+can be highly variable simply because its replicates disagree. Smoothing
+expression across time points can reveal this ordered response, but it
+discards information about how noisy each gene's expression is between
+replicates.
 
-## Individual genes
+The signal-to-noise ratio (SNR), widely used in signal processing,
+describes the strength of an ordered time response while still
+accounting for noise between measurements. A challenge with SNR is that
+the user must define what counts as "signal". Here we define signal as
+the variance in expression explained by a polynomial regression on time
+(typically of second or third degree) and noise as the residual
+variance. We show that this SNR captures the time response, and that the
+same regression also describes the *shape* of each gene's response.
 
-![Each panel is one gene. Points are individual replicates (raw read
-counts); the line is the polynomial fit of expression on time-point, the
-model from which SNR is calculated. The y-axis is set separately for
-each gene.](snr_trajectories_per_gene.png){#fig-genes}
+The standard next step in a time-series analysis is to group genes with
+similar trajectories. Commonly used approaches include k-means and
+hierarchical clustering, with or without smoothing or dimension
+reduction, and model-based alternatives such as independent component
+analysis [@nascimento2017] and Gaussian process mixture models
+[@mcdowell2018]. Density-based methods such as HDBSCAN [@campello2013]
+go further and explicitly label genes that do not fit any cluster as
+outliers, and have been combined with hierarchical co-expression
+clustering to resolve compact gene modules [@dyugay2026]. Every
+partitioning method, however, is affected by observations that fit no
+group: k-means and PCA can be distorted by a small number of outliers
+unless they are modeled explicitly [@witten2013], and removing the least
+reliable observations before clustering changes the clusters that
+HDBSCAN and k-means recover [@yigin2023]. In time-series RNA-seq, the
+least reliable observations are genes with little ordered change and
+noisy replicates.
 
-## 
+We therefore ask whether SNR, computed for each gene *before*
+clustering, identifies the genes that clustering methods fail to place,
+and whether removing low-SNR genes improves the clusters that remain. We
+compare SNR with simpler summaries of gene variability, and test it
+against established clustering methods in terms of 1) identifying the
+genes with the strongest time-dependent changes in expression, and 2)
+describing the typical shapes of expression responses among groups of
+genes.
+
+# Results
+
+## Measuring signal-to-noise in time-series RNA-seq data-sets
+
+For each gene we defined **signal** as the variance in expression
+explained by a third-degree polynomial regression of read counts on time
+point, and **noise** as the residual variance. The signal-to-noise ratio
+(SNR) is their ratio, ESS/RSS, computed on the replicate-level counts so
+that disagreement between replicates counts as noise.
+
+To show what high and low SNR look like in practice, we drew six genes
+at random from the top 10% and six from the bottom 10% of the 7,512
+genes in the immune data-set ranked by SNR (@fig-snr-examples). The
+high-SNR examples (SNR 1.22 to 12.82) follow clear trajectories over
+time: most dip early and then rise steadily toward the end of the time
+course, and one peaks sharply around time points 6 to 8. The two
+replicates at each time point agree closely. The low-SNR examples (SNR
+0.01 to 0.06) move up and down between neighboring time points with no
+consistent direction, and their replicates often disagree. Several of
+them are also very lowly expressed, with only one or two reads at most
+time points, so part of their noise reflects the sampling error of low
+read counts.
+
+![Randomly selected genes from the top 10% (blue) and bottom 10% (red)
+of the immune dataset by SNR. Points are individual replicates; the line
+joins the mean at each timepoint. Panel titles give each gene's SNR; the
+y-axis is set separately for each
+gene.](snr_examples_per_gene.png){#fig-snr-examples}
+
+## SNR pre-filtering removes the genes that HDBSCAN cannot cluster
+
+Clustering methods such as k-means and hierarchical clustering assign
+every gene to a cluster, whether or not its expression follows any of
+the cluster shapes. To see how many genes fit no cluster at all, we
+clustered the immune trajectories (replicate means, log2(counts + 1),
+z-scored within each gene) with HDBSCAN [@campello2013], a density-based
+method that labels genes in sparse regions as outliers rather than
+forcing them into a cluster, and visualized the result with UMAP
+[@mcinnes2018].
+
+Before any filtering by SNR, most genes in the immune data-set do not
+fall into a clear group. When all genes were clustered with HDBSCAN
+(minPts = 50) and visualized with UMAP (@fig-umap-prefiltered), only two
+compact groups of genes formed clusters, while the large majority were
+flagged as outliers and spread across the map as a continuous cloud with
+no clear boundaries. These outliers are the genes whose relationship to
+SNR we examine in the next section.
+
+![UMAP of the immune dataset before SNR filtering, coloured by HDBSCAN
+cluster (minPts = 50). Grey points are genes flagged as outliers
+(HDBSCAN cluster
+0).](images/umap_hdbscan_ImmuneCounts-01.png){#fig-umap-prefiltered}
+
+We then asked which of these genes the SNR filter would remove. Keeping
+each gene's label from the unfiltered HDBSCAN run, we removed the 10%,
+25% and 50% of genes with the lowest SNR (corresponding to SNR cutoffs
+of 0.08, 0.17 and 0.37) and showed the remaining genes on the same UMAP
+(@fig-umap-prefilter). The filter removed outliers far more readily than
+clustered genes: 80% of outliers versus 19% of clustered genes at the 10
+filter, 30% versus 4% at 25%, and 60% versus 12% at 50%. At every
+cutoff, the filter removed 5 to 12 times more of the outliers than of
+the clustered genes. In the UMAP, the outliers emptied out of the center
+of the map as the cutoff rose, while both clusters at its edges stayed
+largely intact.
+
+SNR is computed for each gene before any clustering and without
+reference to any cluster. That it removes HDBscan's outliers so
+preferentially shows that SNR, measured before clustering, identifies
+largely the same unreliable genes that HDBSCAN identifies after
+clustering.
+
+![The UMAP from @fig-umap-nofilter after removing the 10%, 25% and 50%
+of genes with the lowest SNR. Each gene keeps its label from the
+unfiltered HDBSCAN run, and genes removed by the filter are hidden, so
+the panels show which genes each filter removes. Panel titles give the
+percentage of HDBSCAN outliers and of clustered genes
+removed.](images/snr_cutoff_umap_hdbscan.png){#fig-umap-prefilter}
